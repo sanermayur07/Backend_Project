@@ -1,22 +1,17 @@
-<<<<<<< HEAD
-FROM eclipse-temurin:17-jdk
 
+FROM maven:3.9-eclipse-temurin-17 AS build
 WORKDIR /app
 
-COPY . .
+COPY pom.xml .
+COPY src ./src
 
-RUN chmod +x mvnw
-RUN ./mvnw clean package -DskipTests
+RUN mvn clean package -DskipTests
 
-=======
-FROM eclipse-temurin:17-jdk
-
+FROM eclipse-temurin:17-jre
 WORKDIR /app
 
-COPY . .
+COPY --from=build /app/target/*.jar app.jar
 
-RUN chmod +x mvnw
-RUN ./mvnw clean package -DskipTests
+EXPOSE 10000
 
->>>>>>> e052f7a9b32ceba4ebd020358a624f0bd5006405
-CMD ["sh", "-c", "java -jar target/*.jar"]
+ENTRYPOINT ["sh", "-c", "java -Dserver.port=${PORT:-10000} -jar app.jar"]
