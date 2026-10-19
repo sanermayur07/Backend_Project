@@ -1,291 +1,175 @@
+
 package com.shoppingcart.security;
 
+import com.shoppingcart.security.CustomUserDetailsService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-
 import org.springframework.http.HttpMethod;
-
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
-
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-
 import org.springframework.security.config.http.SessionCreationPolicy;
-
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
-
 import org.springframework.security.web.SecurityFilterChain;
 
 @Configuration
-@EnableMethodSecurity
 @EnableWebSecurity
+@EnableMethodSecurity
 public class SecurityConfig {
 
     private final CustomUserDetailsService customUserDetailsService;
 
-    public SecurityConfig(
-            CustomUserDetailsService customUserDetailsService) {
-
-        this.customUserDetailsService =
-                customUserDetailsService;
+    public SecurityConfig(CustomUserDetailsService customUserDetailsService) {
+        this.customUserDetailsService = customUserDetailsService;
     }
 
-    // ==========================================
-    // PASSWORD ENCODER
-    // ==========================================
-
+    // Password encoder
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
 
-    // ==========================================
-    // AUTHENTICATION PROVIDER
-    // ==========================================
-
+    // Authentication provider
     @Bean
     public AuthenticationProvider authenticationProvider() {
-
         DaoAuthenticationProvider provider =
-                new DaoAuthenticationProvider(
-                        customUserDetailsService
-                );
+                new DaoAuthenticationProvider(customUserDetailsService);
 
         provider.setPasswordEncoder(passwordEncoder());
-
         return provider;
     }
 
-    // ==========================================
-    // AUTHENTICATION MANAGER
-    // ==========================================
-
+    // Authentication manager
     @Bean
     public AuthenticationManager authenticationManager(
-            AuthenticationConfiguration configuration)
-            throws Exception {
-
+            AuthenticationConfiguration configuration) throws Exception {
         return configuration.getAuthenticationManager();
     }
 
-    // ==========================================
-    // SECURITY FILTER CHAIN
-    // ==========================================
-
+    // Security filter chain
     @Bean
-    public SecurityFilterChain securityFilterChain(
-            HttpSecurity http) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http)
+            throws Exception {
 
         http
-        
-        		.cors(cors -> {})
-                // REST API development
-                .csrf(csrf -> csrf.disable())
+            // Use the CorsConfigurationSource from CorsConfig
+            .cors(cors -> {})
 
-                // Session authentication
-                .sessionManagement(session ->
-                        session.sessionCreationPolicy(
-                                SessionCreationPolicy.IF_REQUIRED
-                        )
-                )
+            // Keep disabled only if your API uses a non-CSRF-token approach.
+            // See the session/CSRF note below.
+            .csrf(csrf -> csrf.disable())
 
-                .authorizeHttpRequests(auth -> auth
+            // Preserve session-based authentication
+            .sessionManagement(session ->
+                session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
+            )
 
-                	    // ==========================================
-                	    // PUBLIC USER APIs
-                	    // ==========================================
+            .authenticationProvider(authenticationProvider())
 
-                	    .requestMatchers(
-                	            org.springframework.http.HttpMethod.POST,
-                	            "/api/users/register",
-                	            "/api/users/login"
-                	    ).permitAll()
+            .authorizeHttpRequests(auth -> auth
 
+                // Public registration and login
+                .requestMatchers(HttpMethod.POST,
+                        "/api/users/register",
+                        "/api/users/login"
+                ).permitAll()
 
-                	    
-                	    
-                	    // ==========================================
-                	    // CURRENT USER
-                	    // ==========================================
+                // Public product browsing
+                .requestMatchers(HttpMethod.GET,
+                        "/api/products",
+                        "/api/products/**"
+                ).permitAll()
 
-                	    .requestMatchers(
-                	            "/api/users/me"
-                	    ).hasAnyRole("CUSTOMER", "ADMIN")
+                // Public product reviews
+                .requestMatchers(HttpMethod.GET,
+                        "/api/reviews",
+                        "/api/reviews/**"
+                ).permitAll()
 
+                // Current authenticated user
+                .requestMatchers("/api/users/me")
+                .hasAnyRole("CUSTOMER", "ADMIN")
 
-                	    // ==========================================
-                	    // PRODUCTS - GET
-                	    // ==========================================
+                // Admin product management
+                .requestMatchers(HttpMethod.POST, "/api/products")
+                .hasRole("ADMIN")
 
-                	    .requestMatchers(
-                	            org.springframework.http.HttpMethod.GET,
-                	            "/api/products",
-                	            "/api/products/**"
-                	    ).permitAll()
+                .requestMatchers(HttpMethod.PUT, "/api/products/**")
+                .hasRole("ADMIN")
 
+                .requestMatchers(HttpMethod.DELETE, "/api/products/**")
+                .hasRole("ADMIN")
 
-                	    // ==========================================
-                	    // ADMIN PRODUCT MANAGEMENT
-                	    // ==========================================
+                // Admin user management
+                .requestMatchers(HttpMethod.GET, "/api/users")
+                .hasRole("ADMIN")
 
-                	    .requestMatchers(
-                	            org.springframework.http.HttpMethod.POST,
-                	            "/api/products"
-                	    ).hasRole("ADMIN")
+                .requestMatchers("/api/admin/**")
+                .hasRole("ADMIN")
 
-                	    .requestMatchers(
-                	            org.springframework.http.HttpMethod.PUT,
-                	            "/api/products/**"
-                	    ).hasRole("ADMIN")
+                // User profile endpoints
+                .requestMatchers(HttpMethod.GET, "/api/users/{userId}")
+                .hasAnyRole("CUSTOMER", "ADMIN")
 
-                	    .requestMatchers(
-                	            org.springframework.http.HttpMethod.DELETE,
-                	            "/api/products/**"
-                	    ).hasRole("ADMIN")
+                .requestMatchers(HttpMethod.PUT, "/api/users/{userId}")
+                .hasAnyRole("CUSTOMER", "ADMIN")
 
+                .requestMatchers(HttpMethod.DELETE, "/api/users/{userId}")
+                .hasRole("ADMIN")
 
-                	    // ==========================================
-                	    // ADMIN USER MANAGEMENT
-                	    // ==========================================
+                // Cart
+                .requestMatchers("/api/cart/**")
+                .hasAnyRole("CUSTOMER", "ADMIN")
 
-                	    .requestMatchers(
-                	            org.springframework.http.HttpMethod.GET,
-                	            "/api/users"
-                	    ).hasRole("ADMIN")
+                // Payment
+                .requestMatchers(HttpMethod.POST, "/api/payment/process")
+                .hasAnyRole("CUSTOMER", "ADMIN")
 
-                	 // ==========================================
-                	 // ADMIN APIs
-                	 // ==========================================
+                .requestMatchers(HttpMethod.GET,
+                        "/api/payment/{paymentId}",
+                        "/api/payment/order/{orderId}"
+                ).hasAnyRole("CUSTOMER", "ADMIN")
 
-                	 .requestMatchers(
-                	         "/api/admin/**"
-                	 ).hasRole("ADMIN")
+                // Review creation, update, and deletion
+                .requestMatchers(HttpMethod.POST, "/api/reviews")
+                .hasAnyRole("CUSTOMER", "ADMIN")
 
-                	    // ==========================================
-                	    // USER PROFILE
-                	    // ==========================================
+                .requestMatchers(HttpMethod.PUT, "/api/reviews/**")
+                .hasAnyRole("CUSTOMER", "ADMIN")
 
-                	    .requestMatchers(
-                	            org.springframework.http.HttpMethod.GET,
-                	            "/api/users/{userId}"
-                	    ).hasAnyRole("CUSTOMER", "ADMIN")
+                .requestMatchers(HttpMethod.DELETE, "/api/reviews/**")
+                .hasAnyRole("CUSTOMER", "ADMIN")
 
-                	    .requestMatchers(
-                	            org.springframework.http.HttpMethod.PUT,
-                	            "/api/users/{userId}"
-                	    ).hasAnyRole("CUSTOMER", "ADMIN")
+                // Addresses
+                .requestMatchers(HttpMethod.POST, "/api/addresses")
+                .hasAnyRole("CUSTOMER", "ADMIN")
 
-                	    .requestMatchers(
-                	            org.springframework.http.HttpMethod.DELETE,
-                	            "/api/users/{userId}"
-                	    ).hasRole("ADMIN")
+                .requestMatchers(HttpMethod.GET,
+                        "/api/addresses",
+                        "/api/addresses/**"
+                ).hasAnyRole("CUSTOMER", "ADMIN")
 
+                .requestMatchers(HttpMethod.PUT, "/api/addresses/**")
+                .hasAnyRole("CUSTOMER", "ADMIN")
 
-                	    // ==========================================
-                	    // CART APIs
-                	    // ==========================================
+                .requestMatchers(HttpMethod.DELETE, "/api/addresses/**")
+                .hasAnyRole("CUSTOMER", "ADMIN")
 
-                	    .requestMatchers(
-                	            "/api/cart/**"
-                	    ).hasAnyRole("CUSTOMER", "ADMIN")
+                // Admin orders
+                .requestMatchers(HttpMethod.GET, "/api/orders")
+                .hasRole("ADMIN")
 
+                .requestMatchers(HttpMethod.PUT, "/api/orders/*/status")
+                .hasRole("ADMIN")
 
-                	    // ==========================================
-                	    // PAYMENT APIs
-                	    // ==========================================
-
-                	    .requestMatchers(
-                	            org.springframework.http.HttpMethod.POST,
-                	            "/api/payment/process"
-                	    ).hasAnyRole("CUSTOMER", "ADMIN")
-
-                	    .requestMatchers(
-                	            org.springframework.http.HttpMethod.GET,
-                	            "/api/payment/{paymentId}"
-                	    ).hasAnyRole("CUSTOMER", "ADMIN")
-
-                	    .requestMatchers(
-                	            org.springframework.http.HttpMethod.GET,
-                	            "/api/payment/order/{orderId}"
-                	    ).hasAnyRole("CUSTOMER", "ADMIN")
-
-                	 // ==========================================
-                	 // REVIEWS
-                	 // ==========================================
-
-                	 // Anyone can view product reviews
-                	 .requestMatchers(
-                	         HttpMethod.GET,
-                	         "/api/reviews",
-                	         "/api/reviews/**"
-                	 ).permitAll()
-
-                	 // Customers and admins can create reviews
-                	 .requestMatchers(
-                	         HttpMethod.POST,
-                	         "/api/reviews"
-                	 ).hasAnyRole("CUSTOMER", "ADMIN")
-
-                	 // Customers and admins can update reviews
-                	 .requestMatchers(
-                	         HttpMethod.PUT,
-                	         "/api/reviews/**"
-                	 ).hasAnyRole("CUSTOMER", "ADMIN")
-
-                	 // Customers and admins can delete reviews
-                	 .requestMatchers(
-                	         HttpMethod.DELETE,
-                	         "/api/reviews/**"
-                	 ).hasAnyRole("CUSTOMER", "ADMIN")
-                	 
-                	// ==========================================
-                	// ADDRESS APIs
-                	// ==========================================
-
-                	// CUSTOMER and ADMIN can create address
-                	.requestMatchers(
-                	        org.springframework.http.HttpMethod.POST,
-                	        "/api/addresses"
-                	).hasAnyRole("CUSTOMER", "ADMIN")
-
-                	// CUSTOMER and ADMIN can view addresses
-                	.requestMatchers(
-                	        org.springframework.http.HttpMethod.GET,
-                	        "/api/addresses",
-                	        "/api/addresses/**"
-                	).hasAnyRole("CUSTOMER", "ADMIN")
-
-                	// CUSTOMER and ADMIN can update address
-                	.requestMatchers(
-                	        org.springframework.http.HttpMethod.PUT,
-                	        "/api/addresses/**"
-                	).hasAnyRole("CUSTOMER", "ADMIN")
-
-                	// CUSTOMER and ADMIN can delete address
-                	.requestMatchers(
-                	        org.springframework.http.HttpMethod.DELETE,
-                	        "/api/addresses/**"
-                	).hasAnyRole("CUSTOMER", "ADMIN")
-                	
-                	//
-                	
-                	.requestMatchers(HttpMethod.GET, "/api/orders")
-                    .hasRole("ADMIN")
-                	
-                    .requestMatchers(HttpMethod.PUT, "/api/orders/*/status")
-                    .hasRole("ADMIN")
-                    
-                	    // ==========================================
-                	    // EVERYTHING ELSE
-                	    // ==========================================
-
-                	    .anyRequest().authenticated()
-                	);
+                // All other requests require authentication
+                .anyRequest().authenticated()
+            );
 
         return http.build();
     }

@@ -17,7 +17,7 @@ public class CorsConfig {
         CorsConfiguration configuration = new CorsConfiguration();
 
         configuration.setAllowedOrigins(
-                List.of("https://shopping-cart-frontend-omega.vercel.app/")
+                List.of("https://shopping-cart-frontend-omega.vercel.app","http://localhost:5173")
         );
 
         configuration.setAllowedMethods(
